@@ -46,8 +46,8 @@ OWNER_ID=your_discord_id
 
 2. Installation
 
-```bash
 # Clone and install
+```bash
 git clone <repository>
 cd digambergpt-super-bot
 pip install -r requirements.txt
