@@ -74,9 +74,9 @@ class ModCommands(commands.Cog):
         deleted = await ctx.channel.purge(limit=amount + 1)
         await ctx.send(f"✅ Deleted {len(deleted) - 1} messages", delete_after=5)
 
-    # ✅ FIXED: Method name changed from bot_info to bot_information
+    # ✅ FIXED: Method name changed to info_bot (no bot_ prefix)
     @commands.hybrid_command(name="botinfo", description="Show detailed bot information")
-    async def bot_information(self, ctx):  # ✅ NAME CHANGED
+    async def info_bot(self, ctx):  # ✅ NAME CHANGED - no bot_ prefix
         """Show bot information"""
         embed = discord.Embed(
             title="🤖 DigamberGPT Super Bot",
