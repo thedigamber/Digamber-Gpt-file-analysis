@@ -122,80 +122,106 @@ class ChatGPTBot(commands.Bot):
         # Process commands for other channels
         await self.process_commands(message)
 
-    # ✅ NEW FUNCTION: FILE UPLOAD PROCESSOR
+    # ✅ NEW FUNCTION: AUTO-FIX FILE CONTENT
+    async def auto_fix_file(self, file_content, filename):
+        """Auto-fix errors in file content"""
+        try:
+            prompt = f"""
+            FILE AUTO-FIX REQUEST:
+            Filename: {filename}
+            
+            Please analyze this file and FIX ALL ERRORS.
+            
+            Return ONLY the COMPLETELY FIXED FILE CONTENT.
+            Do not add explanations, comments, or notes.
+            Just return the corrected code/file content.
+            
+            If it's code, fix:
+            - Syntax errors
+            - Logical errors  
+            - Performance issues
+            - Security vulnerabilities
+            - Best practices violations
+            
+            File Content to Fix:
+            {file_content}
+            """
+            
+            response = self.groq_client.chat.completions.create(
+                model="llama-3.1-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=4000,
+                temperature=0.1
+            )
+            
+            fixed_content = response.choices[0].message.content
+            
+            # Clean the response (remove code blocks if any)
+            if fixed_content.startswith('```'):
+                # Remove code block markers
+                lines = fixed_content.split('\n')
+                if lines[0].startswith('```'):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith('```'):
+                    lines = lines[:-1]
+                fixed_content = '\n'.join(lines)
+                    
+            return fixed_content.strip()
+            
+        except Exception as e:
+            print(f"Auto-fix error: {e}")
+            return None
+
+    # ✅ COMPLETELY UPDATED FILE UPLOAD PROCESSOR
     async def process_file_upload(self, message):
-        """Process file uploads for analysis and fixes"""
+        """Process file uploads - Analyze + Auto-fix + Send fixed file"""
         try:
             for attachment in message.attachments:
-                if attachment.size > 100 * 1024 * 1024:  # 100MB limit
+                if attachment.size > 100 * 1024 * 1024:
                     await message.reply("❌ File size exceeds 100MB limit!")
                     continue
                 
-                # Show processing message
-                processing_msg = await message.reply(f"🔍 Analyzing `{attachment.filename}`...")
+                # Step 1: Show processing message
+                processing_msg = await message.reply(f"🔧 **Auto-Fixing `{attachment.filename}`**\n📥 Downloading...")
                 
-                # Download file
+                # Step 2: Download original file
                 file_content = await attachment.read()
                 file_text = file_content.decode('utf-8', errors='ignore')
                 
-                # Analyze with Groq AI
-                analysis = await self.analyze_file_with_groq(file_text, attachment.filename)
+                # Step 3: Analyze and get fixes
+                await processing_msg.edit(content=f"🔧 **Auto-Fixing `{attachment.filename}`**\n🔍 Analyzing errors...")
                 
-                # Send analysis results
-                await processing_msg.edit(content=f"📄 **File Analysis: `{attachment.filename}`**\n\n{analysis}")
+                fixed_content = await self.auto_fix_file(file_text, attachment.filename)
+                
+                if not fixed_content:
+                    await processing_msg.edit(content=f"❌ **Failed to fix `{attachment.filename}`**\nPlease try again.")
+                    return
+                
+                # Step 4: Create fixed file and send
+                await processing_msg.edit(content=f"🔧 **Auto-Fixing `{attachment.filename}`**\n📤 Sending fixed file...")
+                
+                # Create new filename
+                name, ext = os.path.splitext(attachment.filename)
+                fixed_filename = f"{name}_FIXED{ext}"
+                
+                # Create file object
+                fixed_file = discord.File(
+                    io.BytesIO(fixed_content.encode('utf-8')),
+                    filename=fixed_filename
+                )
+                
+                # Step 5: Send the fixed file
+                await processing_msg.edit(content=f"✅ **Successfully Fixed!**")
+                await message.reply(
+                    f"**🔧 Fixed File: `{fixed_filename}`**\n"
+                    f"**Original: `{attachment.filename}`**\n"
+                    f"*All errors have been automatically fixed* ✅",
+                    file=fixed_file
+                )
                 
         except Exception as e:
             await message.reply(f"❌ Error processing file: {str(e)}")
             print(f"File processing error: {e}")
-
-    # ✅ UPDATED FUNCTION: GROQ FILE ANALYSIS WITH ERROR HANDLING
-    async def analyze_file_with_groq(self, file_content, filename):
-        """Analyze file content using Groq AI"""
-        try:
-            prompt = f"""
-            FILE ANALYSIS REQUEST:
-            Filename: {filename}
-            Content: {file_content[:3000]}...
-            
-            Please analyze this file and provide:
-            1. **Errors/Gadbadi**: Any issues, bugs, or improvements needed
-            2. **Fix Suggestions**: How to fix the problems
-            3. **Optimizations**: Ways to improve the code/file
-            4. **Security Issues**: Any security vulnerabilities
-            
-            Provide detailed analysis in Hindi/English mix.
-            """
-            
-            # Try primary model first
-            try:
-                response = self.groq_client.chat.completions.create(
-                    model="llama-3.1-70b-versatile",  # ✅ PRIMARY MODEL
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=2000
-                )
-                return response.choices[0].message.content
-                
-            except Exception as model_error:
-                # If primary fails, try alternative model
-                print(f"Primary model failed: {model_error}. Trying alternative...")
-                
-                response = self.groq_client.chat.completions.create(
-                    model="llama-3.1-8b-instant",  # ✅ ALTERNATIVE MODEL
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=2000
-                )
-                return response.choices[0].message.content
-                
-        except Exception as e:
-            error_msg = str(e)
-            if "model_decommissioned" in error_msg:
-                return "🔄 Bot updating models... Please try again in 30 seconds!"
-            elif "rate limit" in error_msg.lower():
-                return "⏳ Rate limit reached. Please wait a minute and try again."
-            elif "authentication" in error_msg.lower():
-                return "🔑 API authentication failed. Please check bot configuration."
-            else:
-                return f"❌ Analysis failed: {str(e)}"
 
     async def process_ai_message(self, message):
         """Process AI messages automatically"""
