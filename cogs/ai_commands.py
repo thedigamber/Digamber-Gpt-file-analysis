@@ -7,6 +7,7 @@ from groq import Groq
 from datetime import datetime, timedelta
 import aiohttp
 import io
+from utils.database import db  # ✅ Database import
 
 class AICommands(commands.Cog):
     def __init__(self, bot):
@@ -16,35 +17,65 @@ class AICommands(commands.Cog):
         self.user_stats = {}
         self.cooldowns = {}
 
-    async def get_ai_response(self, user_input):
-        """Get AI response - used by both commands and auto-response"""
+    async def get_ai_response(self, user_input, user_id=None, channel_id=None, username=None):
+        """Get AI response with CHANNEL MEMORY"""
         try:
-            # Check if API key is set
             if not os.getenv("GROQ_API_KEY"):
-                return "❌ **Configuration Error:** Groq API key not set. Please check environment variables."
+                return "❌ **Configuration Error:** Groq API key not set."
             
-            prompt = f"""
-You are DigamberGPT, an advanced AI assistant created by DIGAMBER. 
-You are helpful, creative, and intelligent. 
-Never mention that you are an AI model or your training data.
-Respond naturally and helpfully.
-
-User: {user_input}
-"""
+            # ✅ GET CHANNEL MEMORY (PURE CHANNEL KI MEMORY)
+            memory_messages = []
+            if channel_id:
+                memory_messages = await db.get_channel_memory(str(channel_id))
+            
+            # Build messages with memory
+            messages = []
+            
+            # Add system prompt
+            messages.append({
+                "role": "system", 
+                "content": "You are DigamberGPT, an advanced AI assistant created by DIGAMBER. You are helpful, creative, and intelligent. Never mention that you are an AI model or your training data. Respond naturally and helpfully. Remember the conversation context from previous messages."
+            })
+            
+            # Add conversation memory from channel (LAST 15 MESSAGES)
+            for memory in memory_messages[-15:]:
+                role = "user" if memory['role'] == "user" else "assistant"
+                messages.append({
+                    "role": role,
+                    "content": memory['content']
+                })
+            
+            # Add current message
+            messages.append({
+                "role": "user", 
+                "content": user_input
+            })
             
             response = self.groq.chat.completions.create(
                 model="llama-3.1-8b-instant",
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 temperature=0.7,
                 max_tokens=1000
             )
             
-            return response.choices[0].message.content
+            ai_response = response.choices[0].message.content
+            
+            # ✅ SAVE TO CHANNEL MEMORY
+            if channel_id and username:
+                await db.add_to_channel_memory(str(channel_id), username, "user", user_input)
+                await db.add_to_channel_memory(str(channel_id), "DigamberGPT", "assistant", ai_response)
+            
+            # ✅ ALSO SAVE TO USER MEMORY
+            if user_id:
+                await db.add_to_user_memory(str(user_id), "user", user_input)
+                await db.add_to_user_memory(str(user_id), "assistant", ai_response)
+            
+            return ai_response
             
         except Exception as e:
             error_msg = str(e)
             if "authentication" in error_msg.lower():
-                return "❌ **API Error:** Invalid Groq API key. Please check your environment variables."
+                return "❌ **API Error:** Invalid Groq API key."
             elif "rate limit" in error_msg.lower():
                 return "⚠️ **Rate Limit:** Too many requests. Please try again in a moment."
             else:
@@ -53,13 +84,95 @@ User: {user_input}
     @commands.hybrid_command(name="ask", description="Ask anything to AI")
     @app_commands.describe(question="Your question")
     async def ask_ai(self, ctx, question: str):
-        """AI command for non-AI channels"""
+        """AI command with memory"""
         await ctx.defer()
         
-        reply = await self.get_ai_response(question)
+        reply = await self.get_ai_response(
+            question, 
+            ctx.author.id, 
+            ctx.channel.id,
+            ctx.author.display_name
+        )
         await ctx.followup.send(f"**{ctx.author.display_name}:** {question}\n\n**DigamberGPT:** {reply}")
 
-    # ✅ NEW COMMAND: ANALYZE CODE/FILE
+    # ✅ ENHANCED MEMORY MANAGEMENT COMMANDS
+    @commands.hybrid_command(name="memory", description="Manage conversation memory")
+    @app_commands.describe(action="What to do with memory", scope="user or channel")
+    async def memory_management(self, ctx, action: str = "status", scope: str = "user"):
+        """Manage conversation memory"""
+        
+        if action.lower() in ["clear", "delete", "reset"]:
+            if scope.lower() == "channel":
+                await db.clear_channel_memory(str(ctx.channel.id))
+                await ctx.send("✅ **Channel Memory cleared!**\nThis channel's conversation history has been reset.")
+            else:
+                await db.clear_user_memory(str(ctx.author.id))
+                await ctx.send("✅ **Personal Memory cleared!**\nYour conversation history has been reset.")
+        
+        elif action.lower() in ["status", "info"]:
+            if scope.lower() == "channel":
+                memory = await db.get_channel_memory(str(ctx.channel.id))
+                memory_count = len(memory)
+                
+                embed = discord.Embed(
+                    title="🧠 Channel Conversation Memory",
+                    color=0x9b59b6,
+                    timestamp=datetime.now()
+                )
+                embed.add_field(name="Channel Messages", value=memory_count, inline=True)
+                embed.add_field(name="Memory Limit", value="20 messages", inline=True)
+                
+                if memory_count > 0:
+                    last_user = memory[-1]['username']
+                    last_message = memory[-1]['content'][:50] + "..." if len(memory[-1]['content']) > 50 else memory[-1]['content']
+                    embed.add_field(name="Last Message", value=f"**{last_user}:** `{last_message}`", inline=False)
+                
+                embed.set_footer(text="Use '/memory clear channel' to reset channel memory")
+                await ctx.send(embed=embed)
+            else:
+                memory = await db.get_user_memory(str(ctx.author.id))
+                memory_count = len(memory)
+                
+                embed = discord.Embed(
+                    title="🧠 Your Personal Memory",
+                    color=0x3498db,
+                    timestamp=datetime.now()
+                )
+                embed.add_field(name="Your Messages", value=memory_count, inline=True)
+                embed.add_field(name="Memory Limit", value="15 messages", inline=True)
+                
+                if memory_count > 0:
+                    last_message = memory[-1]['content'][:50] + "..." if len(memory[-1]['content']) > 50 else memory[-1]['content']
+                    embed.add_field(name="Last Message", value=f"`{last_message}`", inline=False)
+                
+                embed.set_footer(text="Use '/memory clear' to reset your memory")
+                await ctx.send(embed=embed)
+        
+        else:
+            await ctx.send("""
+**🧠 Memory Commands:**
+• `/memory status` - Check your memory
+• `/memory status channel` - Check channel memory  
+• `/memory clear` - Clear your memory
+• `/memory clear channel` - Clear channel memory
+            """)
+
+    # ✅ ENHANCED CLEAR COMMAND
+    @commands.hybrid_command(name="clear", description="Clear your conversation history and memory")
+    async def clear_chat(self, ctx):
+        """Clear AI conversation history and memory"""
+        user_id = ctx.author.id
+        
+        # Clear in-memory conversations
+        if user_id in self.conversations:
+            self.conversations[user_id] = []
+        
+        # Clear database memory
+        await db.clear_user_memory(str(user_id))
+        
+        await ctx.send("✅ **Conversation cleared!**\nYour personal chat history has been reset.")
+
+    # ✅ ALL EXISTING FEATURES PRESERVED
     @commands.hybrid_command(name="analyze", description="Analyze code/file for errors and improvements")
     @app_commands.describe(code="Paste your code or describe the file")
     async def analyze_code(self, ctx, *, code: str):
@@ -77,14 +190,12 @@ User: {user_input}
             1. **Errors/Bugs**: Any syntax errors, logical errors, or issues
             2. **Fix Suggestions**: How to fix the problems
             3. **Optimizations**: Ways to improve performance/readability
-            4. **Security Issues**: Any vulnerabilities
-            5. **Best Practices**: Coding standards to follow
             
             Provide detailed analysis in Hindi/English mix.
             """
             
             response = self.groq.chat.completions.create(
-                model="mixtral-8x7b-32768",
+                model="llama-3.1-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1500,
                 temperature=0.3
@@ -92,7 +203,6 @@ User: {user_input}
             
             analysis = response.choices[0].message.content
             
-            # Format response
             embed = discord.Embed(
                 title="🔍 Code Analysis Report",
                 description=analysis[:4090] + "..." if len(analysis) > 4090 else analysis,
@@ -106,7 +216,6 @@ User: {user_input}
         except Exception as e:
             await ctx.followup.send(f"❌ Analysis failed: {str(e)}")
 
-    # ✅ NEW COMMAND: FIX CODE
     @commands.hybrid_command(name="fix", description="Fix errors in your code")
     @app_commands.describe(code="Paste your broken code", issue="Describe the issue (optional)")
     async def fix_code(self, ctx, *, code: str, issue: str = "Not specified"):
@@ -132,7 +241,7 @@ User: {user_input}
             """
             
             response = self.groq.chat.completions.create(
-                model="mixtral-8x7b-32768",
+                model="llama-3.1-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2000,
                 temperature=0.2
@@ -153,7 +262,6 @@ User: {user_input}
         except Exception as e:
             await ctx.followup.send(f"❌ Fix failed: {str(e)}")
 
-    # ✅ NEW COMMAND: CONVERT CODE
     @commands.hybrid_command(name="convert", description="Convert code between programming languages")
     @app_commands.describe(code="Code to convert", from_lang="Source language", to_lang="Target language")
     async def convert_code(self, ctx, code: str, from_lang: str, to_lang: str):
@@ -177,7 +285,7 @@ User: {user_input}
             """
             
             response = self.groq.chat.completions.create(
-                model="mixtral-8x7b-32768",
+                model="llama-3.1-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2000,
                 temperature=0.3
@@ -197,16 +305,6 @@ User: {user_input}
             
         except Exception as e:
             await ctx.followup.send(f"❌ Conversion failed: {str(e)}")
-
-    @commands.hybrid_command(name="clear", description="Clear your conversation history")
-    async def clear_chat(self, ctx):
-        """Clear AI conversation history"""
-        user_id = ctx.author.id
-        if user_id in self.conversations:
-            self.conversations[user_id] = []
-            await ctx.send("✅ Your conversation history cleared!")
-        else:
-            await ctx.send("ℹ️ No conversation history to clear.")
 
     @commands.hybrid_command(name="stats", description="Check your AI usage stats")
     async def user_stats(self, ctx):
