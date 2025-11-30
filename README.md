@@ -52,7 +52,7 @@ OWNER_ID=your_discord_id
 git clone <repository>
 cd digambergpt-super-bot
 pip install -r requirements.txt
-
+```
 # Run the bot
 python app.py
 ```
