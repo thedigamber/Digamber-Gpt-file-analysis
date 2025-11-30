@@ -150,36 +150,45 @@ class ChatGPTBot(commands.Bot):
 
     # ✅ UPDATED FUNCTION: GROQ FILE ANALYSIS WITH NEW MODEL
     async def analyze_file_with_groq(self, file_content, filename):
-        """Analyze file content using Groq AI"""
-        try:
-            prompt = f"""
-            FILE ANALYSIS REQUEST:
-            Filename: {filename}
-            Content: {file_content[:3000]}...
-            
-            Please analyze this file and provide:
-            1. **Errors/Gadbadi**: Any issues, bugs, or improvements needed
-            2. **Fix Suggestions**: How to fix the problems
-            3. **Optimizations**: Ways to improve the code/file
-            4. **Security Issues**: Any security vulnerabilities
-            
-            Provide detailed analysis in Hindi/English mix.
-            """
-            
-            # ✅ UPDATED MODEL - mixtral-8x7b-32768 ki jagah
-            response = self.groq_client.chat.completions.create(
-                model="llama-3.1-70b-versatile",  # ✅ NEW WORKING MODEL
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=2000
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            error_msg = str(e)
-            if "model_decommissioned" in error_msg:
-                return "❌ Model update required. Please contact bot administrator."
-            return f"❌ Analysis failed: {str(e)}"
+    """Analyze file content using Groq AI"""
+    try:
+        prompt = f"""
+        FILE ANALYSIS REQUEST:
+        Filename: {filename}
+        Content: {file_content[:3000]}...
+        
+        Please analyze this file and provide:
+        1. **Errors/Gadbadi**: Any issues, bugs, or improvements needed
+        2. **Fix Suggestions**: How to fix the problems
+        3. **Optimizations**: Ways to improve the code/file
+        4. **Security Issues**: Any security vulnerabilities
+        
+        Provide detailed analysis in Hindi/English mix.
+        """
+        
+        # ✅ UPDATED MODEL - Working models use karo
+        response = self.groq_client.chat.completions.create(
+            model="llama-3.1-70b-versatile",  # ✅ WORKING MODEL
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2000
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        error_msg = str(e)
+        if "model_decommissioned" in error_msg:
+            # Try alternative model
+            try:
+                response = self.groq_client.chat.completions.create(
+                    model="llama-3.1-8b-instant",  # ✅ ALTERNATIVE MODEL
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2000
+                )
+                return response.choices[0].message.content
+            except:
+                return "❌ All models currently unavailable. Please try again later."
+        return f"❌ Analysis failed: {str(e)}"
 
     async def process_ai_message(self, message):
         """Process AI messages automatically"""
