@@ -100,7 +100,7 @@ class ChatGPTBot(commands.Bot):
             await self.process_file_upload(message)
             return
 
-        # Check if message is in AI channel
+        # ✅ CHAT MESSAGE DETECTION (IMPORTANT FIX!)
         guild_id = str(message.guild.id)
         
         if guild_id in self.ai_channels:
@@ -111,6 +111,7 @@ class ChatGPTBot(commands.Bot):
                     await self.process_ai_message(message)
                     return
         
+        # ✅ PROCESS REGULAR COMMANDS
         await self.process_commands(message)
 
     # ✅ AUTO-FIX FILE FUNCTION
@@ -155,7 +156,7 @@ class ChatGPTBot(commands.Bot):
             
         except Exception as e:
             print(f"Auto-fix error: {e}")
-            return None, f"❌ Fixing failed: {str(e)[:100]}"
+            return None, f"❌ Fixing failed"
 
     # ✅ COMPLETE AUTO-FIX PROCESSOR
     async def process_file_upload(self, message):
@@ -214,23 +215,31 @@ class ChatGPTBot(commands.Bot):
         except Exception as e:
             await message.reply("❌ Upload error. Please try again.")
 
+    # ✅ CHAT MESSAGE PROCESSOR (IMPORTANT FIX!)
     async def process_ai_message(self, message):
-        """Process AI messages automatically"""
+        """Process AI messages automatically - FIXED VERSION"""
         try:
+            # Get AI cog directly
             ai_cog = self.get_cog('AICommands')
             if ai_cog:
                 async with message.channel.typing():
+                    # Use the cog's method to get AI response
                     response = await ai_cog.get_ai_response(message.content)
                     await message.reply(response)
+            else:
+                # Fallback if cog not loaded
+                await message.reply("🤖 **Chat Feature**\n\nUse `/ask` command to chat with me!\nOr upload files for auto-fixing.")
+                
         except Exception as e:
-            print(f"AI processing error: {e}")
+            print(f"AI chat error: {e}")
+            await message.reply("💬 **Chat with me using:**\n`/ask [your message]`")
 
     @tasks.loop(minutes=10)
     async def update_presence(self):
         activities = [
             discord.Activity(type=discord.ActivityType.watching, name=f"{len(self.guilds)} servers"),
-            discord.Activity(type=discord.ActivityType.listening, name="Auto-Fix Files"),
-            discord.Activity(type=discord.ActivityType.playing, name="Upload files to fix!")
+            discord.Activity(type=discord.ActivityType.listening, name="Chat & File Fix"),
+            discord.Activity(type=discord.ActivityType.playing, name="/ask to chat!")
         ]
         activity = activities[(datetime.now().minute // 10) % len(activities)]
         await self.change_presence(activity=activity)
