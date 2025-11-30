@@ -3,7 +3,7 @@ import aiofiles
 import asyncio
 import os
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 class JSONDatabase:
     def __init__(self, db_file: str = "data/database.json"):
@@ -65,41 +65,69 @@ class JSONDatabase:
             
         await self.set_user_data(user_id, user_data)
 
-    # ✅ NEW: FILE ANALYSIS TRACKING
-    async def log_file_analysis(self, user_id: str, filename: str, file_type: str, analysis_result: str):
-        """Log file analysis for statistics"""
-        user_data = await self.get_user_data(user_id)
-        
-        if 'file_analyses' not in user_data:
-            user_data['file_analyses'] = []
-            
-        user_data['file_analyses'].append({
-            'filename': filename,
-            'file_type': file_type,
-            'timestamp': datetime.now().isoformat(),
-            'result_length': len(analysis_result)
-        })
-        
-        # Keep only last 50 analyses
-        user_data['file_analyses'] = user_data['file_analyses'][-50:]
-        
-        await self.set_user_data(user_id, user_data)
+    # ✅ ENHANCED MEMORY SYSTEM - CHANNEL WIDE MEMORY
+    async def get_channel_memory(self, channel_id: str) -> List[Dict[str, str]]:
+        """Get channel's conversation memory"""
+        data = await self.read_data()
+        return data.get('channel_memory', {}).get(channel_id, [])
 
-    # ✅ NEW: BUILD PROJECTS TRACKING
-    async def log_build_project(self, user_id: str, project_type: str, language: str, success: bool):
-        """Log project builds for statistics"""
-        user_data = await self.get_user_data(user_id)
+    async def add_to_channel_memory(self, channel_id: str, username: str, role: str, content: str):
+        """Add message to channel memory"""
+        data = await self.read_data()
         
-        if 'build_projects' not in user_data:
-            user_data['build_projects'] = []
+        if 'channel_memory' not in data:
+            data['channel_memory'] = {}
             
-        user_data['build_projects'].append({
-            'project_type': project_type,
-            'language': language,
-            'success': success,
+        if channel_id not in data['channel_memory']:
+            data['channel_memory'][channel_id] = []
+        
+        # Add new message with username
+        data['channel_memory'][channel_id].append({
+            'username': username,
+            'role': role,
+            'content': content,
             'timestamp': datetime.now().isoformat()
         })
         
+        # Keep only last 20 messages per channel (increased limit)
+        data['channel_memory'][channel_id] = data['channel_memory'][channel_id][-20:]
+        
+        await self.write_data(data)
+
+    async def clear_channel_memory(self, channel_id: str):
+        """Clear channel's conversation memory"""
+        data = await self.read_data()
+        if 'channel_memory' in data and channel_id in data['channel_memory']:
+            data['channel_memory'][channel_id] = []
+            await self.write_data(data)
+
+    async def get_user_memory(self, user_id: str) -> List[Dict[str, str]]:
+        """Get user's personal conversation memory"""
+        user_data = await self.get_user_data(user_id)
+        return user_data.get('conversation_memory', [])
+
+    async def add_to_user_memory(self, user_id: str, role: str, content: str):
+        """Add message to user's personal memory"""
+        user_data = await self.get_user_data(user_id)
+        
+        if 'conversation_memory' not in user_data:
+            user_data['conversation_memory'] = []
+        
+        user_data['conversation_memory'].append({
+            'role': role,
+            'content': content,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        # Keep only last 15 messages per user
+        user_data['conversation_memory'] = user_data['conversation_memory'][-15:]
+        
+        await self.set_user_data(user_id, user_data)
+
+    async def clear_user_memory(self, user_id: str):
+        """Clear user's personal memory"""
+        user_data = await self.get_user_data(user_id)
+        user_data['conversation_memory'] = []
         await self.set_user_data(user_id, user_data)
 
     async def get_global_stats(self) -> Dict[str, Any]:
@@ -119,7 +147,41 @@ class JSONDatabase:
         data['global_stats'] = stats
         await self.write_data(data)
 
-    # ✅ NEW: GET USER FILE STATS
+    # ✅ FILE ANALYSIS TRACKING
+    async def log_file_analysis(self, user_id: str, filename: str, file_type: str, analysis_result: str):
+        """Log file analysis for statistics"""
+        user_data = await self.get_user_data(user_id)
+        
+        if 'file_analyses' not in user_data:
+            user_data['file_analyses'] = []
+            
+        user_data['file_analyses'].append({
+            'filename': filename,
+            'file_type': file_type,
+            'timestamp': datetime.now().isoformat(),
+            'result_length': len(analysis_result)
+        })
+        
+        user_data['file_analyses'] = user_data['file_analyses'][-50:]
+        await self.set_user_data(user_id, user_data)
+
+    # ✅ BUILD PROJECTS TRACKING
+    async def log_build_project(self, user_id: str, project_type: str, language: str, success: bool):
+        """Log project builds for statistics"""
+        user_data = await self.get_user_data(user_id)
+        
+        if 'build_projects' not in user_data:
+            user_data['build_projects'] = []
+            
+        user_data['build_projects'].append({
+            'project_type': project_type,
+            'language': language,
+            'success': success,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        await self.set_user_data(user_id, user_data)
+
     async def get_user_file_stats(self, user_id: str) -> Dict[str, Any]:
         """Get user file analysis statistics"""
         user_data = await self.get_user_data(user_id)
