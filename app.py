@@ -100,7 +100,7 @@ class ChatGPTBot(commands.Bot):
             await self.process_file_upload(message)
             return
 
-        # ✅ CHAT MESSAGE DETECTION (IMPORTANT FIX!)
+        # ✅ CHAT MESSAGE DETECTION
         guild_id = str(message.guild.id)
         
         if guild_id in self.ai_channels:
@@ -215,16 +215,20 @@ class ChatGPTBot(commands.Bot):
         except Exception as e:
             await message.reply("❌ Upload error. Please try again.")
 
-    # ✅ CHAT MESSAGE PROCESSOR (IMPORTANT FIX!)
+    # ✅ CHAT MESSAGE PROCESSOR WITH CHANNEL MEMORY
     async def process_ai_message(self, message):
-        """Process AI messages automatically - FIXED VERSION"""
+        """Process AI messages automatically with CHANNEL MEMORY"""
         try:
-            # Get AI cog directly
             ai_cog = self.get_cog('AICommands')
             if ai_cog:
                 async with message.channel.typing():
-                    # Use the cog's method to get AI response
-                    response = await ai_cog.get_ai_response(message.content)
+                    # ✅ PASS CHANNEL ID & USERNAME FOR CHANNEL MEMORY
+                    response = await ai_cog.get_ai_response(
+                        message.content, 
+                        message.author.id,
+                        message.channel.id, 
+                        message.author.display_name
+                    )
                     await message.reply(response)
             else:
                 # Fallback if cog not loaded
