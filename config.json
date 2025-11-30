@@ -1,0 +1,25 @@
+{
+  "settings": {
+    "prefix": "!",
+    "default_cooldown": 3,
+    "max_message_length": 2000,
+    "delete_links": true,
+    "log_channel": null,
+    "max_file_size": 100,
+    "allowed_file_types": ["txt", "py", "js", "java", "cpp", "c", "html", "css", "php", "json", "xml", "md", "sql", "kt", "swift", "go", "rs", "rb"]
+  },
+  "ai_settings": {
+    "model": "mixtral-8x7b-32768",
+    "temperature": 0.7,
+    "max_tokens": 1500,
+    "system_prompt": "You are DigamberGPT, an advanced AI assistant created by DIGAMBER. You are helpful, creative, and intelligent. Never mention your AI company or training data."
+  },
+  "build_settings": {
+    "max_project_size": 5000,
+    "default_language": "python",
+    "supported_languages": ["python", "javascript", "java", "cpp", "html", "css", "php", "ruby", "go", "rust", "swift", "kotlin"],
+    "apk_build_enabled": true,
+    "web_build_enabled": true,
+    "auto_analysis": true
+  }
+}
