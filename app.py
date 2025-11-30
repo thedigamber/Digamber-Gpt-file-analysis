@@ -113,78 +113,106 @@ class ChatGPTBot(commands.Bot):
         
         await self.process_commands(message)
 
-    # ✅ WORKING FILE ANALYSIS FUNCTION
-    async def analyze_file_with_groq(self, file_content, filename):
-        """Working file analysis with proper error handling"""
+    # ✅ AUTO-FIX FILE FUNCTION
+    async def auto_fix_file(self, file_content, filename):
+        """Auto-fix file content and return fixed version"""
         try:
-            # For ZIP files
-            if filename.lower().endswith(('.zip', '.rar', '.7z')):
-                return "📦 **Archive File Detected**\n\nPlease extract and upload individual files:\n• `.py` - Python\n• `.js` - JavaScript\n• `.java` - Java\n• `.html` - Web\n• `.txt` - Text\n\nI'll analyze and help fix code files!"
+            # For non-fixable files
+            if filename.lower().endswith(('.zip', '.rar', '.7z', '.jpg', '.jpeg', '.png', '.gif')):
+                return None, "📦 **I can't fix archive/image files**\n\nPlease upload individual code files:\n• `.py` - Python\n• `.js` - JavaScript\n• `.java` - Java\n• `.txt` - Text\n• `.html` - Web pages"
             
-            # For image files
-            if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp')):
-                return "🖼️ **Image File**\n\nI can analyze code files. Please upload:\n• Python (.py)\n• JavaScript (.js)\n• Java (.java)\n• Text files (.txt)"
-            
-            # For code/text files - SIMPLE PROMPT
             prompt = f"""
-            Analyze this code file briefly:
-            File: {filename}
-            Content: {file_content[:500]}
+            FIX THIS CODE FILE:
+            Filename: {filename}
             
-            Give 2-3 line summary of issues and suggestions.
+            Fix ALL errors and return ONLY the corrected code.
+            Fix: syntax errors, bugs, logic errors, security issues.
+            Return PURE fixed code without explanations.
+            
+            Code to fix:
+            {file_content[:3000]}
             """
             
-            # Try with error handling
-            try:
-                response = self.groq_client.chat.completions.create(
-                    model="llama-3.1-8b-instant",  # Use lighter model
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=150,
-                    temperature=0.3
-                )
-                
-                result = response.choices[0].message.content
-                return f"🔍 **Analysis Complete**\n\n{result}"
-                
-            except Exception as api_error:
-                # If API fails, provide generic analysis
-                file_ext = filename.split('.')[-1].upper() if '.' in filename else "TEXT"
-                return f"📄 **{file_ext} File Analysis**\n\n✅ File received successfully!\n📝 Use `/analyze` command for detailed code analysis.\n🔧 Use `/fix` command to auto-fix code issues."
-                
+            response = self.groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                temperature=0.1
+            )
+            
+            fixed_content = response.choices[0].message.content
+            
+            # Clean code block markers
+            if fixed_content.startswith('```'):
+                lines = fixed_content.split('\n')
+                if len(lines) > 1 and lines[0].startswith('```'):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith('```'):
+                    lines = lines[:-1]
+                fixed_content = '\n'.join(lines)
+            
+            return fixed_content.strip(), None
+            
         except Exception as e:
-            # Final fallback
-            return "📄 **File Received**\n\n✅ I've received your file!\n💡 Use `/analyze` command for code analysis or ask me anything!"
+            print(f"Auto-fix error: {e}")
+            return None, f"❌ Fixing failed: {str(e)[:100]}"
 
-    # ✅ SIMPLE & RELIABLE FILE PROCESSOR
+    # ✅ COMPLETE AUTO-FIX PROCESSOR
     async def process_file_upload(self, message):
-        """Process file uploads - RELIABLE VERSION"""
+        """Process file uploads - AUTO-FIX + SEND FIXED FILE"""
         try:
             for attachment in message.attachments:
                 if attachment.size > 100 * 1024 * 1024:
                     await message.reply("❌ File too large (100MB max)")
                     continue
                 
-                # Show processing message
-                processing_msg = await message.reply(f"🔍 Analyzing `{attachment.filename}`...")
+                # Step 1: Show processing
+                processing_msg = await message.reply(f"🔧 **Auto-Fixing `{attachment.filename}`**\n⏳ Please wait...")
                 
                 try:
-                    # Download file
+                    # Step 2: Download file
                     file_content = await attachment.read()
                     file_text = file_content.decode('utf-8', errors='ignore')
                     
-                    # Get analysis
-                    analysis = await self.analyze_file_with_groq(file_text, attachment.filename)
+                    # Step 3: Auto-fix file
+                    await processing_msg.edit(content=f"🔧 **Auto-Fixing `{attachment.filename}`**\n🔍 Analyzing errors...")
                     
-                    # Send final result
-                    await processing_msg.edit(content=analysis)
+                    fixed_content, error_msg = await self.auto_fix_file(file_text, attachment.filename)
+                    
+                    if error_msg:
+                        await processing_msg.edit(content=error_msg)
+                        return
+                    
+                    if not fixed_content:
+                        await processing_msg.edit(content=f"❌ **Cannot fix `{attachment.filename}`**\nPlease upload code files (.py, .js, .java, etc.)")
+                        return
+                    
+                    # Step 4: Create fixed file
+                    await processing_msg.edit(content=f"🔧 **Auto-Fixing `{attachment.filename}`**\n📁 Creating fixed file...")
+                    
+                    # Create new filename
+                    name, ext = os.path.splitext(attachment.filename)
+                    fixed_filename = f"{name}_FIXED{ext}"
+                    
+                    # Create file object
+                    fixed_file = discord.File(
+                        io.BytesIO(fixed_content.encode('utf-8')),
+                        filename=fixed_filename
+                    )
+                    
+                    # Step 5: Send fixed file
+                    await processing_msg.delete()  # Remove processing message
+                    
+                    await message.reply(
+                        content=f"✅ **Fixed File Ready!**\n**Original:** `{attachment.filename}`\n**Fixed:** `{fixed_filename}`",
+                        file=fixed_file
+                    )
                     
                 except Exception as file_error:
-                    # If file processing fails, still show success
-                    await processing_msg.edit(content=f"📄 **File Received: `{attachment.filename}`**\n\n✅ Upload successful!\n💡 Ask me to analyze or fix your code.")
+                    await processing_msg.edit(content=f"❌ **Processing failed**\nPlease try again with a different file.")
                     
         except Exception as e:
-            # Minimal error message
-            await message.reply("📄 File received! Use commands for analysis.")
+            await message.reply("❌ Upload error. Please try again.")
 
     async def process_ai_message(self, message):
         """Process AI messages automatically"""
@@ -201,8 +229,8 @@ class ChatGPTBot(commands.Bot):
     async def update_presence(self):
         activities = [
             discord.Activity(type=discord.ActivityType.watching, name=f"{len(self.guilds)} servers"),
-            discord.Activity(type=discord.ActivityType.listening, name="File Analysis"),
-            discord.Activity(type=discord.ActivityType.playing, name="/help for commands")
+            discord.Activity(type=discord.ActivityType.listening, name="Auto-Fix Files"),
+            discord.Activity(type=discord.ActivityType.playing, name="Upload files to fix!")
         ]
         activity = activities[(datetime.now().minute // 10) % len(activities)]
         await self.change_presence(activity=activity)
