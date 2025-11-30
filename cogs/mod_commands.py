@@ -14,7 +14,6 @@ class ModCommands(commands.Cog):
     @app_commands.describe(channel="Channel where AI will auto-respond to messages")
     async def set_ai_channel(self, ctx, channel: discord.TextChannel):
         """Set AI channel for auto-response"""
-        # Store in bot memory
         self.bot.ai_channels[str(ctx.guild.id)] = str(channel.id)
         
         embed = discord.Embed(
@@ -75,42 +74,9 @@ class ModCommands(commands.Cog):
         deleted = await ctx.channel.purge(limit=amount + 1)
         await ctx.send(f"✅ Deleted {len(deleted) - 1} messages", delete_after=5)
 
-    # ✅ NEW: SERVER STATS WITH FILE INFO
-    @commands.hybrid_command(name="serverstats", description="Show server statistics with bot features")
-    async def server_stats(self, ctx):
-        """Show server statistics"""
-        guild = ctx.guild
-        
-        embed = discord.Embed(
-            title="📊 Server Statistics",
-            color=0x9b59b6,
-            timestamp=ctx.message.created_at
-        )
-        
-        embed.add_field(name="👥 Members", value=guild.member_count, inline=True)
-        embed.add_field(name="📁 Channels", value=len(guild.channels), inline=True)
-        embed.add_field(name="🎭 Roles", value=len(guild.roles), inline=True)
-        
-        # Bot features info
-        ai_channel_set = str(guild.id) in self.bot.ai_channels
-        embed.add_field(
-            name="🤖 Bot Features", 
-            value=f"• AI Channel: {'✅ Enabled' if ai_channel_set else '❌ Disabled'}\n• File Analysis: ✅ Active\n• APK Building: ✅ Ready\n• Code Fixing: ✅ Available",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🚀 Available Commands",
-            value="• `/ask` - AI Chat\n• `/analyze` - Code analysis\n• `/buildapk` - APK builder\n• `/fix` - Code fixing\n• Upload files for auto-analysis",
-            inline=False
-        )
-        
-        embed.set_footer(text=f"Server ID: {guild.id}")
-        await ctx.send(embed=embed)
-
-    # ✅ NEW: BOT INFO WITH BUILD FEATURES
+    # ✅ FIXED: Method name changed from bot_info to bot_information
     @commands.hybrid_command(name="botinfo", description="Show detailed bot information")
-    async def bot_info(self, ctx):
+    async def bot_information(self, ctx):  # ✅ NAME CHANGED
         """Show bot information"""
         embed = discord.Embed(
             title="🤖 DigamberGPT Super Bot",
@@ -133,7 +99,7 @@ class ModCommands(commands.Cog):
         
         embed.add_field(
             name="📊 Statistics",
-            value=f"• Servers: {len(self.bot.guilds)}\n• Users: {sum(g.member_count for g in self.bot.guilds)}\n• Uptime: {self.bot.helpers.calculate_uptime(self.bot.start_time)}",
+            value=f"• Servers: {len(self.bot.guilds)}\n• Users: {sum(g.member_count for g in self.bot.guilds)}\n• Uptime: Calculating...",
             inline=False
         )
         
@@ -144,6 +110,37 @@ class ModCommands(commands.Cog):
         )
         
         embed.set_footer(text="Created with ❤️ by DIGAMBER")
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name="serverstats", description="Show server statistics with bot features")
+    async def server_stats(self, ctx):
+        """Show server statistics"""
+        guild = ctx.guild
+        
+        embed = discord.Embed(
+            title="📊 Server Statistics",
+            color=0x9b59b6,
+            timestamp=ctx.message.created_at
+        )
+        
+        embed.add_field(name="👥 Members", value=guild.member_count, inline=True)
+        embed.add_field(name="📁 Channels", value=len(guild.channels), inline=True)
+        embed.add_field(name="🎭 Roles", value=len(guild.roles), inline=True)
+        
+        ai_channel_set = str(guild.id) in self.bot.ai_channels
+        embed.add_field(
+            name="🤖 Bot Features", 
+            value=f"• AI Channel: {'✅ Enabled' if ai_channel_set else '❌ Disabled'}\n• File Analysis: ✅ Active\n• APK Building: ✅ Ready\n• Code Fixing: ✅ Available",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🚀 Available Commands",
+            value="• `/ask` - AI Chat\n• `/analyze` - Code analysis\n• `/buildapk` - APK builder\n• `/fix` - Code fixing\n• Upload files for auto-analysis",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Server ID: {guild.id}")
         await ctx.send(embed=embed)
 
 async def setup(bot):
