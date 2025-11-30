@@ -148,7 +148,7 @@ class ChatGPTBot(commands.Bot):
             await message.reply(f"❌ Error processing file: {str(e)}")
             print(f"File processing error: {e}")
 
-    # ✅ NEW FUNCTION: GROQ FILE ANALYSIS
+    # ✅ UPDATED FUNCTION: GROQ FILE ANALYSIS WITH NEW MODEL
     async def analyze_file_with_groq(self, file_content, filename):
         """Analyze file content using Groq AI"""
         try:
@@ -166,8 +166,9 @@ class ChatGPTBot(commands.Bot):
             Provide detailed analysis in Hindi/English mix.
             """
             
+            # ✅ UPDATED MODEL - mixtral-8x7b-32768 ki jagah
             response = self.groq_client.chat.completions.create(
-                model="mixtral-8x7b-32768",
+                model="llama-3.1-70b-versatile",  # ✅ NEW WORKING MODEL
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2000
             )
@@ -175,6 +176,9 @@ class ChatGPTBot(commands.Bot):
             return response.choices[0].message.content
             
         except Exception as e:
+            error_msg = str(e)
+            if "model_decommissioned" in error_msg:
+                return "❌ Model update required. Please contact bot administrator."
             return f"❌ Analysis failed: {str(e)}"
 
     async def process_ai_message(self, message):
