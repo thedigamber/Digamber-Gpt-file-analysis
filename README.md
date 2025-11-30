@@ -54,7 +54,7 @@ pip install -r requirements.txt
 ```
 # Run the bot
 ```
-python app.py```
+python app.py
 ```
 3. Deployment (Render - FREE)
 
