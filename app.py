@@ -148,47 +148,54 @@ class ChatGPTBot(commands.Bot):
             await message.reply(f"❌ Error processing file: {str(e)}")
             print(f"File processing error: {e}")
 
-    # ✅ UPDATED FUNCTION: GROQ FILE ANALYSIS WITH NEW MODEL
+    # ✅ UPDATED FUNCTION: GROQ FILE ANALYSIS WITH ERROR HANDLING
     async def analyze_file_with_groq(self, file_content, filename):
-    """Analyze file content using Groq AI"""
-    try:
-        prompt = f"""
-        FILE ANALYSIS REQUEST:
-        Filename: {filename}
-        Content: {file_content[:3000]}...
-        
-        Please analyze this file and provide:
-        1. **Errors/Gadbadi**: Any issues, bugs, or improvements needed
-        2. **Fix Suggestions**: How to fix the problems
-        3. **Optimizations**: Ways to improve the code/file
-        4. **Security Issues**: Any security vulnerabilities
-        
-        Provide detailed analysis in Hindi/English mix.
-        """
-        
-        # ✅ UPDATED MODEL - Working models use karo
-        response = self.groq_client.chat.completions.create(
-            model="llama-3.1-70b-versatile",  # ✅ WORKING MODEL
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=2000
-        )
-        
-        return response.choices[0].message.content
-        
-    except Exception as e:
-        error_msg = str(e)
-        if "model_decommissioned" in error_msg:
-            # Try alternative model
+        """Analyze file content using Groq AI"""
+        try:
+            prompt = f"""
+            FILE ANALYSIS REQUEST:
+            Filename: {filename}
+            Content: {file_content[:3000]}...
+            
+            Please analyze this file and provide:
+            1. **Errors/Gadbadi**: Any issues, bugs, or improvements needed
+            2. **Fix Suggestions**: How to fix the problems
+            3. **Optimizations**: Ways to improve the code/file
+            4. **Security Issues**: Any security vulnerabilities
+            
+            Provide detailed analysis in Hindi/English mix.
+            """
+            
+            # Try primary model first
             try:
+                response = self.groq_client.chat.completions.create(
+                    model="llama-3.1-70b-versatile",  # ✅ PRIMARY MODEL
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2000
+                )
+                return response.choices[0].message.content
+                
+            except Exception as model_error:
+                # If primary fails, try alternative model
+                print(f"Primary model failed: {model_error}. Trying alternative...")
+                
                 response = self.groq_client.chat.completions.create(
                     model="llama-3.1-8b-instant",  # ✅ ALTERNATIVE MODEL
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=2000
                 )
                 return response.choices[0].message.content
-            except:
-                return "❌ All models currently unavailable. Please try again later."
-        return f"❌ Analysis failed: {str(e)}"
+                
+        except Exception as e:
+            error_msg = str(e)
+            if "model_decommissioned" in error_msg:
+                return "🔄 Bot updating models... Please try again in 30 seconds!"
+            elif "rate limit" in error_msg.lower():
+                return "⏳ Rate limit reached. Please wait a minute and try again."
+            elif "authentication" in error_msg.lower():
+                return "🔑 API authentication failed. Please check bot configuration."
+            else:
+                return f"❌ Analysis failed: {str(e)}"
 
     async def process_ai_message(self, message):
         """Process AI messages automatically"""
